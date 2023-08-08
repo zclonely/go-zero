@@ -3,8 +3,8 @@ package handler
 import (
 	"bytes"
 	"encoding/base64"
-	"io/ioutil"
-	"log"
+	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,12 +20,8 @@ const (
 
 var aesKey = []byte(`PdSgVkYp3s6v9y$B&E)H+MbQeThWmZq4`)
 
-func init() {
-	log.SetOutput(ioutil.Discard)
-}
-
 func TestCryptionHandlerGet(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/any", nil)
+	req := httptest.NewRequest(http.MethodGet, "/any", http.NoBody)
 	handler := CryptionHandler(aesKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := w.Write([]byte(respText))
 		w.Header().Set("X-Test", "test")
@@ -49,7 +45,7 @@ func TestCryptionHandlerPost(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/any", &buf)
 	handler := CryptionHandler(aesKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		assert.Nil(t, err)
 		assert.Equal(t, reqText, string(body))
 
@@ -79,7 +75,7 @@ func TestCryptionHandlerPostBadEncryption(t *testing.T) {
 }
 
 func TestCryptionHandlerWriteHeader(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/any", nil)
+	req := httptest.NewRequest(http.MethodGet, "/any", http.NoBody)
 	handler := CryptionHandler(aesKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
@@ -89,7 +85,7 @@ func TestCryptionHandlerWriteHeader(t *testing.T) {
 }
 
 func TestCryptionHandlerFlush(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/any", nil)
+	req := httptest.NewRequest(http.MethodGet, "/any", http.NoBody)
 	handler := CryptionHandler(aesKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(respText))
 		flusher, ok := w.(http.Flusher)
@@ -115,4 +111,19 @@ func TestCryptionHandler_Hijack(t *testing.T) {
 	assert.NotPanics(t, func() {
 		writer.Hijack()
 	})
+}
+
+func TestCryptionHandler_ContentTooLong(t *testing.T) {
+	handler := CryptionHandler(aesKey)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	}))
+	svr := httptest.NewServer(handler)
+	defer svr.Close()
+
+	body := make([]byte, maxBytes+1)
+	rand.Read(body)
+	req, err := http.NewRequest(http.MethodPost, svr.URL, bytes.NewReader(body))
+	assert.Nil(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

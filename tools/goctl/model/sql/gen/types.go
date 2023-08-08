@@ -4,6 +4,7 @@ import (
 	"github.com/zeromicro/go-zero/tools/goctl/model/sql/template"
 	"github.com/zeromicro/go-zero/tools/goctl/util"
 	"github.com/zeromicro/go-zero/tools/goctl/util/pathx"
+	"github.com/zeromicro/go-zero/tools/goctl/util/stringx"
 )
 
 func genTypes(table Table, methods string, withCache bool) (string, error) {
@@ -20,10 +21,11 @@ func genTypes(table Table, methods string, withCache bool) (string, error) {
 
 	output, err := util.With("types").
 		Parse(text).
-		Execute(map[string]interface{}{
+		Execute(map[string]any{
 			"withCache":             withCache,
 			"method":                methods,
 			"upperStartCamelObject": table.Name.ToCamel(),
+			"lowerStartCamelObject": stringx.From(table.Name.ToCamel()).Untitle(),
 			"fields":                fieldsString,
 			"data":                  table,
 		})

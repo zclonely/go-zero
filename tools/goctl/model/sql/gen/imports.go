@@ -6,16 +6,17 @@ import (
 	"github.com/zeromicro/go-zero/tools/goctl/util/pathx"
 )
 
-func genImports(withCache, timeImport bool, table Table) (string, error) {
+func genImports(table Table, withCache, timeImport bool) (string, error) {
 	if withCache {
 		text, err := pathx.LoadTemplate(category, importsTemplateFile, template.Imports)
 		if err != nil {
 			return "", err
 		}
 
-		buffer, err := util.With("import").Parse(text).Execute(map[string]interface{}{
-			"time": timeImport,
-			"data": table,
+		buffer, err := util.With("import").Parse(text).Execute(map[string]any{
+			"time":       timeImport,
+			"containsPQ": table.ContainsPQ,
+			"data":       table,
 		})
 		if err != nil {
 			return "", err
@@ -29,9 +30,10 @@ func genImports(withCache, timeImport bool, table Table) (string, error) {
 		return "", err
 	}
 
-	buffer, err := util.With("import").Parse(text).Execute(map[string]interface{}{
-		"time": timeImport,
-		"data": table,
+	buffer, err := util.With("import").Parse(text).Execute(map[string]any{
+		"time":       timeImport,
+		"containsPQ": table.ContainsPQ,
+		"data":       table,
 	})
 	if err != nil {
 		return "", err

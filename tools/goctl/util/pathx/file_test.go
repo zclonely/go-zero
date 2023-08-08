@@ -1,7 +1,6 @@
 package pathx
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +22,7 @@ func TestGetTemplateDir(t *testing.T) {
 			return
 		}
 		tempFile := filepath.Join(dir, "bar.txt")
-		err = ioutil.WriteFile(tempFile, []byte("foo"), os.ModePerm)
+		err = os.WriteFile(tempFile, []byte("foo"), os.ModePerm)
 		if err != nil {
 			return
 		}
@@ -73,4 +72,35 @@ func TestGetGitHome(t *testing.T) {
 
 	expected := filepath.Join(homeDir, goctlDir, gitDir)
 	assert.Equal(t, expected, actual)
+}
+
+func TestGetGoctlHome(t *testing.T) {
+	t.Run("goctl_is_file", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "a.tmp")
+		backupTempFile := tmpFile + ".old"
+		err := os.WriteFile(tmpFile, nil, 0o666)
+		if err != nil {
+			return
+		}
+		RegisterGoctlHome(tmpFile)
+		home, err := GetGoctlHome()
+		if err != nil {
+			return
+		}
+		info, err := os.Stat(home)
+		assert.Nil(t, err)
+		assert.True(t, info.IsDir())
+
+		_, err = os.Stat(backupTempFile)
+		assert.Nil(t, err)
+	})
+
+	t.Run("goctl_is_dir", func(t *testing.T) {
+		RegisterGoctlHome("")
+		dir := t.TempDir()
+		RegisterGoctlHome(dir)
+		home, err := GetGoctlHome()
+		assert.Nil(t, err)
+		assert.Equal(t, dir, home)
+	})
 }

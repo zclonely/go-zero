@@ -24,7 +24,7 @@ const (
 type kubeBuilder struct{}
 
 func (b *kubeBuilder) Build(target resolver.Target, cc resolver.ClientConn,
-	opts resolver.BuildOptions) (resolver.Resolver, error) {
+	_ resolver.BuildOptions) (resolver.Resolver, error) {
 	svc, err := kube.ParseTarget(target)
 	if err != nil {
 		return nil, err
@@ -38,6 +38,14 @@ func (b *kubeBuilder) Build(target resolver.Target, cc resolver.ClientConn,
 	cs, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
+	}
+
+	if svc.Port == 0 {
+		endpoints, err := cs.CoreV1().Endpoints(svc.Namespace).Get(context.Background(), svc.Name, v1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		svc.Port = int(endpoints.Subsets[0].Ports[0].Port)
 	}
 
 	handler := kube.NewEventHandler(func(endpoints []string) {
@@ -64,12 +72,10 @@ func (b *kubeBuilder) Build(target resolver.Target, cc resolver.ClientConn,
 	threading.GoSafe(func() {
 		inf.Start(proc.Done())
 	})
-
 	endpoints, err := cs.CoreV1().Endpoints(svc.Namespace).Get(context.Background(), svc.Name, v1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-
 	handler.Update(endpoints)
 
 	return &nopResolver{cc: cc}, nil

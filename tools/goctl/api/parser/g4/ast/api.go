@@ -8,8 +8,10 @@ import (
 	"github.com/zeromicro/go-zero/tools/goctl/api/parser/g4/gen/api"
 )
 
-const prefixKey = "prefix"
-const groupKey = "group"
+const (
+	prefixKey = "prefix"
+	groupKey  = "group"
+)
 
 // Api describes syntax for api
 type Api struct {
@@ -27,7 +29,7 @@ type Api struct {
 }
 
 // VisitApi implements from api.BaseApiParserVisitor
-func (v *ApiVisitor) VisitApi(ctx *api.ApiContext) interface{} {
+func (v *ApiVisitor) VisitApi(ctx *api.ApiContext) any {
 	var final Api
 	final.importM = map[string]PlaceHolder{}
 	final.typeM = map[string]PlaceHolder{}
@@ -174,7 +176,7 @@ func (v *ApiVisitor) acceptSyntax(root, final *Api) {
 }
 
 // VisitSpec implements from api.BaseApiParserVisitor
-func (v *ApiVisitor) VisitSpec(ctx *api.SpecContext) interface{} {
+func (v *ApiVisitor) VisitSpec(ctx *api.SpecContext) any {
 	var root Api
 	if ctx.SyntaxLit() != nil {
 		root.Syntax = ctx.SyntaxLit().Accept(v).(*SyntaxExpr)
@@ -207,8 +209,8 @@ func (a *Api) Format() error {
 }
 
 // Equal compares whether the element literals in two Api are equal
-func (a *Api) Equal(v interface{}) bool {
-	if v == nil {
+func (a *Api) Equal(v any) bool {
+	if v == nil || a == nil {
 		return false
 	}
 

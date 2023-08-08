@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"go/format"
 	"go/scanner"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/urfave/cli"
+	"github.com/spf13/cobra"
 	"github.com/zeromicro/go-zero/core/errorx"
 	"github.com/zeromicro/go-zero/tools/goctl/api/parser"
 	"github.com/zeromicro/go-zero/tools/goctl/api/util"
+	"github.com/zeromicro/go-zero/tools/goctl/pkg/env"
+	apiF "github.com/zeromicro/go-zero/tools/goctl/pkg/parser/api/format"
 	"github.com/zeromicro/go-zero/tools/goctl/util/pathx"
 )
 
@@ -25,29 +27,37 @@ const (
 	rightBrace       = "}"
 )
 
-// GoFormatApi format api file
-func GoFormatApi(c *cli.Context) error {
-	useStdin := c.Bool("stdin")
+var (
+	// VarBoolUseStdin describes whether to use stdin or not.
+	VarBoolUseStdin bool
+	// VarBoolSkipCheckDeclare describes whether to skip.
+	VarBoolSkipCheckDeclare bool
+	// VarStringDir describes the directory.
+	VarStringDir string
+	// VarBoolIgnore describes whether to ignore.
+	VarBoolIgnore bool
+)
 
+// GoFormatApi format api file
+func GoFormatApi(_ *cobra.Command, _ []string) error {
 	var be errorx.BatchError
-	if useStdin {
-		if err := apiFormatByStdin(); err != nil {
+	if VarBoolUseStdin {
+		if err := apiFormatReader(os.Stdin, VarStringDir, VarBoolSkipCheckDeclare); err != nil {
 			be.Add(err)
 		}
 	} else {
-		dir := c.String("dir")
-		if len(dir) == 0 {
+		if len(VarStringDir) == 0 {
 			return errors.New("missing -dir")
 		}
 
-		_, err := os.Lstat(dir)
+		_, err := os.Lstat(VarStringDir)
 		if err != nil {
-			return errors.New(dir + ": No such file or directory")
+			return errors.New(VarStringDir + ": No such file or directory")
 		}
 
-		err = filepath.Walk(dir, func(path string, fi os.FileInfo, errBack error) (err error) {
+		err = filepath.Walk(VarStringDir, func(path string, fi os.FileInfo, errBack error) (err error) {
 			if strings.HasSuffix(path, ".api") {
-				if err := ApiFormatByPath(path); err != nil {
+				if err := ApiFormatByPath(path, VarBoolSkipCheckDeclare); err != nil {
 					be.Add(util.WrapErr(err, fi.Name()))
 				}
 			}
@@ -64,13 +74,14 @@ func GoFormatApi(c *cli.Context) error {
 	return be.Err()
 }
 
-func apiFormatByStdin() error {
-	data, err := ioutil.ReadAll(os.Stdin)
+// apiFormatReader
+// filename is needed when there are `import` literals.
+func apiFormatReader(reader io.Reader, filename string, skipCheckDeclare bool) error {
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return err
 	}
-
-	result, err := apiFormat(string(data))
+	result, err := apiFormat(string(data), skipCheckDeclare, filename)
 	if err != nil {
 		return err
 	}
@@ -80,8 +91,12 @@ func apiFormatByStdin() error {
 }
 
 // ApiFormatByPath format api from file path
-func ApiFormatByPath(apiFilePath string) error {
-	data, err := ioutil.ReadFile(apiFilePath)
+func ApiFormatByPath(apiFilePath string, skipCheckDeclare bool) error {
+	if env.UseExperimental() {
+		return apiF.File(apiFilePath)
+	}
+
+	data, err := os.ReadFile(apiFilePath)
 	if err != nil {
 		return err
 	}
@@ -91,21 +106,26 @@ func ApiFormatByPath(apiFilePath string) error {
 		return err
 	}
 
-	result, err := apiFormat(string(data), abs)
+	result, err := apiFormat(string(data), skipCheckDeclare, abs)
 	if err != nil {
 		return err
 	}
 
-	_, err = parser.ParseContent(result, abs)
+	_, err = parser.ParseContentWithParserSkipCheckTypeDeclaration(result, abs)
 	if err != nil {
 		return err
 	}
 
-	return ioutil.WriteFile(apiFilePath, []byte(result), os.ModePerm)
+	return os.WriteFile(apiFilePath, []byte(result), os.ModePerm)
 }
 
-func apiFormat(data string, filename ...string) (string, error) {
-	_, err := parser.ParseContent(data, filename...)
+func apiFormat(data string, skipCheckDeclare bool, filename ...string) (string, error) {
+	var err error
+	if skipCheckDeclare {
+		_, err = parser.ParseContentWithParserSkipCheckTypeDeclaration(data, filename...)
+	} else {
+		_, err = parser.ParseContent(data, filename...)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -130,12 +150,12 @@ func apiFormat(data string, filename ...string) (string, error) {
 		}
 
 		if tapCount == 0 {
-			format, err := formatGoTypeDef(line, s, &builder)
+			ft, err := formatGoTypeDef(line, s, &builder)
 			if err != nil {
 				return "", err
 			}
 
-			if format {
+			if ft {
 				continue
 			}
 		}
@@ -151,7 +171,9 @@ func apiFormat(data string, filename ...string) (string, error) {
 				tapCount++
 			}
 		}
-		util.WriteIndent(&builder, tapCount)
+		if line != "" {
+			util.WriteIndent(&builder, tapCount)
+		}
 		builder.WriteString(line + pathx.NL)
 		if strings.HasSuffix(noCommentLine, leftParenthesis) || strings.HasSuffix(noCommentLine, leftBrace) {
 			tapCount++

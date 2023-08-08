@@ -25,6 +25,7 @@ type (
 
 	// A BulkInserter is used to batch insert records.
 	// Postgresql is not supported yet, because of the sql is formated with symbol `$`.
+	// Oracle is not supported yet, because of the sql is formated with symbol `:`.
 	BulkInserter struct {
 		executor *executors.PeriodicalExecutor
 		inserter *dbInserter
@@ -63,7 +64,7 @@ func (bi *BulkInserter) Flush() {
 }
 
 // Insert inserts given args.
-func (bi *BulkInserter) Insert(args ...interface{}) error {
+func (bi *BulkInserter) Insert(args ...any) error {
 	value, err := format(bi.stmt.valueFormat, args...)
 	if err != nil {
 		return err
@@ -109,12 +110,12 @@ type dbInserter struct {
 	resultHandler ResultHandler
 }
 
-func (in *dbInserter) AddTask(task interface{}) bool {
+func (in *dbInserter) AddTask(task any) bool {
 	in.values = append(in.values, task.(string))
 	return len(in.values) >= maxBulkRows
 }
 
-func (in *dbInserter) Execute(bulk interface{}) {
+func (in *dbInserter) Execute(bulk any) {
 	values := bulk.([]string)
 	if len(values) == 0 {
 		return
@@ -134,7 +135,7 @@ func (in *dbInserter) Execute(bulk interface{}) {
 	}
 }
 
-func (in *dbInserter) RemoveAll() interface{} {
+func (in *dbInserter) RemoveAll() any {
 	values := in.values
 	in.values = nil
 	return values
